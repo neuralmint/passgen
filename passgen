@@ -21,7 +21,6 @@ import secrets
 import string
 import sys
 
-ETH_ADDR = "0x643E158D7615d19F1f0105B0cc5a1D976B456e4A"
 
 # Wordlist for passphrases (Diceware-style, 50 common words)
 WORDS = """abacus abandon ability abolish about above abroad absence 
