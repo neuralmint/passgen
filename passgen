@@ -323,7 +323,6 @@ def main():
                 print(f"({ent} bits of entropy)")
     
     if args.count > 1:
-        print(f"\nDonations: {ETH_ADDR} (ETH)")
 
 if __name__ == "__main__":
     main()
