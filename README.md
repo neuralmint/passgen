@@ -1,59 +1,39 @@
-# passgen
+<h1 align="center">🔐 passgen</h1>
+<p align="center">
+  <b>Secure password & passphrase generator for the terminal. Pure Python, zero deps.</b>
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.6+-blue.svg">
+  <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg">
+  <img src="https://img.shields.io/badge/license-MIT-green.svg">
+</p>
 
-Secure password & passphrase generator for the terminal. No dependencies.
-
-## Install
+## 🚀 Install
 
 ```bash
 curl -L https://raw.githubusercontent.com/neuralmint/passgen/main/passgen -o /usr/local/bin/passgen
 chmod +x /usr/local/bin/passgen
 ```
 
-## Usage
+## 📋 Usage
 
 ```bash
-passgen                          # 20-char random password
-passgen -l 32                    # Custom length (32 chars)
-passgen -s                       # Include symbols
-passgen -n 5                     # Generate 5 at once
-passgen phrase                   # Memorable 4-word passphrase
-passgen phrase -w 6              # 6-word passphrase
-passgen pin                      # 6-digit PIN
-passgen pin -l 8                 # 8-digit PIN
+passgen                  # 20-char random password
+passgen password         # 20-char with symbols
+passgen phrase           # 4-word passphrase (easier to remember)
+passgen pin              # 6-digit PIN
+passgen -l 32            # Custom length
+passgen -c 5             # Generate 5 passwords
+passgen --no-symbols     # Alphanumeric only
 ```
 
-### Examples
+## 💡 Features
 
-```bash
-$ passgen
-aK3xR9mZpL7qW2nY5vB8
-(132.8 bits of entropy)
+- 🎲 Cryptographically secure random generation
+- 🔤 Configurable character sets
+- 📝 Diceware-style passphrases
+- 🎯 No network calls — works offline
 
-$ passgen phrase
-Dolphin-Rocket-Jungle-Coffee
+## 💝 Donate
 
-$ passgen -s -l 30
-xR#9mK2pL7qW!nY5vB8aD3fG6hJ1kT4
-```
-
-## Entropy Reference
-
-| Type | Example | Bits |
-|------|---------|------|
-| 20-char password | `aK3xR9mZpL7qW2nY5vB8` | ~132 |
-| 4-word phrase | `Dolphin-Rocket-Jungle-Coffee` | ~52 |
-| 6-digit PIN | `483921` | ~20 |
-
-## Requirements
-
-- Python 3.6+
-- No external dependencies
-- Cryptographically secure (`secrets` module)
-
-## License
-
-MIT
-
----
-
-**Donations:** `0x643E158D7615d19F1f0105B0cc5a1D976B456e4A` (ETH)
+**BTC:** `bc1q6ud0w3036ye2vfzkftwywarqswqu3jehs4nqe7`
