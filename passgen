@@ -1,328 +1,147 @@
 #!/usr/bin/env python3
-"""
-passgen — Secure password & passphrase generator for the terminal.
+"""passgen — secure password & passphrase generator for the terminal.
+
+Uses the canonical BIP-39 2048-word list (11 bits/word) instead of a
+hand-pasted wordlist. Offers a deterministic "derive" mode via SHA-256.
 
 Usage:
-    passgen                   Generate a 20-char random password
-    passgen -l 32            Custom length
-    passgen -s               Include symbols
-    passgen -n 5             Generate 5 passwords at once
-    passgen phrase           Generate a memorable passphrase (4 words)
-    passgen phrase -w 6      6-word passphrase
-    passgen pin              Generate a 6-digit PIN
-    passgen pin -l 8         8-digit PIN
+    passgen                    20-char random password
+    passgen -l 32              32-char
+    passgen -s                 include symbols
+    passgen -n 5               generate 5
+    passgen phrase -w 6        BIP-39 passphrase, 6 words
+    passgen derive -w 4 -l 20  BIP39 words -> SHA256 -> trim -> random swaps
+    passgen pin -l 8           8-digit PIN
 """
-
 import argparse
+import hashlib
 import math
-import os
 import random
 import secrets
 import string
 import sys
 
-
-# Wordlist for passphrases (Diceware-style, 50 common words)
-WORDS = """abacus abandon ability abolish about above abroad absence 
-absolute absorb abstract absurd abuse academy accelerate accent accept 
-access accompany account accurate accuse achieve acid acquire across act 
-action active actor actual adapt add addict address adjust admit adult 
-advance advice affair affect afford afraid after again age agency agenda 
-agree ahead alarm album alert alien align alive alley allow almost alone 
-along alter always amazing among amount amplify ancient angle animal 
-announce annual another answer anthem antique anxiety any apart apology 
-appear apple apply approach approve april area argue arise armor array 
-arrive arrow article artist ascend aspect assert assess asset assign 
-assist assume asthma athlete atom attach attack attend attitude attract 
-auction august aunt author auto autumn avenue average avoid awake award 
-aware awful baby back bad bag balance ball banana banner bar bare 
-bargain barrel base basic basket batch battle beach bean bear beast 
-beat beauty because become bed before begin behave behind believe bell 
-belong below belt bench benefit best better beyond bicycle bid big bike 
-bind biology bird birth bitter black blade blame blanket blast blaze 
-bleach bless blind blink block blood bloom blow blue board boast boat 
-body bold bolt bomb bond bone bonus book boost border bore borrow 
-boss both bother bottle bottom bounce box boy brain brand brass brave 
-bread break breath breed brick bridge brief bright bring brisk broad 
-brochure broken brother brown brush bubble budget buffer build bulb bulk 
-bullet bunch burden bureau burn burst bus business busy but butter 
-button buy buyer cabin cable cactus cage cake calm camera camp can 
-cancel candle cannon canvas canyon cap capital captain capture carbon 
-card care career careful cargo carpet carry cart case cash casino cast 
-casual catalog catch category cattle caught cause caution cave cease 
-celebrate celery cell census center ceramic cereal certain chain chair 
-chalk chamber champion chance change channel chapter charge charity charm 
-chart chase cheap check cheek cheese chef cherry chest chief child chip 
-choice choose chronic chunk cigar circle citizen city civil claim 
-clarity clash class classic clause clean clear clerk clever click client 
-cliff climb clinic clip clock clone close cloth cloud club clutch coach 
-coast code coffee coil coin collect college color column combine come 
-comfort comic command comment commit common company compare compel compete 
-compile complain complete complex comply component compose compound 
-compress comprise compute concept concern concert conclude concrete 
-condemn conduct conference confirm conflict conform congress connect 
-consent conserve consider consist console constant construct consult 
-consume contact contain contend content contest contract contrast control 
-convention converge conversation convert convict convince cook cool copper 
-copy copyright cord core cork corn correct corridor corrupt cost cotton 
-couch council count counter country county couple courage course court 
-cousin cover crack cradle craft crane crash crawl crazy cream create 
-creature credit creek crew crime crisis crisp critic crop cross crowd 
-crucial crude cruise crush crystal cube culture cup curious current 
-curtain curve custom cute cycle dad daily damage damp dance danger dare 
-dark dash data date daughter dawn day dead deal dear death debate debt 
-decade decay decide decision deck declare decline decorate decrease 
-decoy deed deep default defeat defend define definite degree delay 
-deliver demand denial density depart depend depict deploy deposit 
-depress derive descend describe desert design desk despair despite 
-destroy detail detect develop device devote diagram dial diamond diary 
-dictate diet differ dig digest digital dignity dilemma dilute dim 
-dimension dine dinner dip direct dirt disable disaster disc discover 
-disease dish disk dismiss display dispose dispute distance distinct 
-distort distribute district disturb dive diverse divide dividend divine 
-division dizzy do doctor document dog domain dominant donate done door 
-dose double doubt down draft drag dragon drama drastic draw dream dress 
-drift drill drink drip drive drop drown drum dry duck due duel dump 
-during dust duty dwarf dwell dynamic eager eagle early earn earth easily 
-east easy eat echo eclipse ecology economy edge edit educate effect 
-effort egg eight either elbow elder electric elegant element elephant 
-elevator eligible elite else embark embrace emerge emergency emit emotion 
-employ empty enable enclose encounter encourage end enemy energy enforce 
-engage engine enhance enjoy enlist enormous enough enrich enroll ensure 
-enter entertain entire entry envelope environment episode equal equip 
-era erase erect erosion error erupt escape essay essence estate eternal 
-ethics ethnic evacuate evaluate even event eventually ever every evidence 
-evil evolve exact example exceed excel except exchange excite exclude 
-execute exercise exert exhaust exhibit exile exist exit exotic expand 
-expect expedition expel expend expense expert explain exploit explore 
-export expose extend extract extra extreme eye fabric face facility 
-fact factor factory faculty fade fail faint fair faith fake fall family 
-famous fan fancy fantasy farm fashion fast fat fatal fate father fault 
-favor fear feast feather feature feed feel female fence festival fetch 
-fever few fiber fiction field fierce fight file fill film final 
-finance find fine finger finish fire firm first fiscal fish fit five 
-fix flag flame flash flat flavor flaw flee fleet flesh flexible flick 
-flight flip float flock flood floor flour flow flower fluid flush fly 
-foam focus fog fold folk follow food foot force forecast forest forever 
-forget fork form formal formula forth fortune forum forward fossil 
-foster found foundation fountain fraction fracture fragile fragment 
-frame framework fraud free freedom freeze freight french frequent fresh 
-friend fringe frog front frost frown fruit fuel fulfill full fun 
-function fund funny furnace furniture further fusion future gadget gain 
-galaxy gallery gamble game gang gap garage garden garlic garment gas 
-gasp gate gather gauge gaze gear gender gene general generate genetic 
-gentle genuine gesture giant gift giggle ginger girl give glad glance 
-glass glide glimpse global glove glow glue goal gold golf good govern 
-grab grace grade grain grand grant graph grasp grass grateful gravity 
-great green greet grid grief grill grind grip grocery gross ground 
-group grow growth guarantee guard guess guest guide guilt guitar gun 
-gut gym habit hack hair half hall halt hammer hand handle happen happy 
-harbor hard harm harvest hat have hazard head health heap hear heart 
-heat heaven heavy hedge height hello helmet help here heritage hero 
-hide high highlight hill hint hip hire history hit hobby hockey hold hole 
-holiday hollow home honey honor hook hope horizon horn horror horse 
-hospital host hotel hour house hover human humor hundred hunger hunt 
-hurricane hurry hurt husband hybrid ice icon idea identify ignore image 
-imagine imitate immediate immense immune impact implement imply import 
-impose improve impulse include income increase indeed index indicate 
-indoor industry infant infinite inform infrared ingredient inherit 
-initial inject injury inmate inner innocent innovate input inquiry insect 
-insert inside insight insist inspect inspire install instant instead 
-institute instruct instrument insurance intact integrate integrity 
-intellect intense interact interest internal internet interpret interval 
-intervene interview intimate into introduce invade invent invest 
-investigate invite involve iron island isolate issue item itself jacket 
-jail jam jar jaw jazz jealous jelly jewel job join joke journal journey 
-joy judge juice jump jungle junior junk just keen keep kelvin kernel 
-kettle key keyboard kick kid kidney kill kind king kiss kitchen knee 
-knife knock know label labor lace lack ladder lake lamp land lane 
-language lap large laser last late later laugh launch law lawn lawsuit 
-layer lazy lead leader leaf league leak learn lease leave lecture left 
-leg legal legend leisure lemon lend length lens lesson letter level 
-lever liability liberal liberty library license life lift light like 
-limit limp line link lion lip list listen literacy little live liver 
-load loan lobby local locate lock logic logo lonely long look loop loose 
-loot lord lose loss lost lot loud love low lower loyal luck luggage 
-lumber lunar lunch lung luxury lyrics machine mad magic magnet maid mail 
-main maintain major make mammal man manage mandate mango mansion manual 
-map maple marble march margin marine mark market marriage marshal marvel 
-mask mass master match material matter mature maximum maybe mayor meadow 
-meal measure meat mechanic medal media medical medium meet melody melt 
-member memory mention menu merchant mercy merge merit mesh message metal 
-method metric middle midnight migrate mild mile milk mill mind mine 
-mineral minimal minimum mining minute miracle mirror missile mission 
-mistake mix mixture mobile model moderate modern modest module moisture 
-molecule moment monitor month mood moon moral more morning mosaic mother 
-motion mountain mouse mouth move movie much mud multiply muscle museum 
-music mutual mystery myth nail naked name narrow nation native nature 
-navy near neat neck need negative neglect neighbor neither nephew nerve 
-nest net network neutral never news next nice night noble noise nominee 
-none noon normal north nose note nothing notice notion novel now nuclear 
-number nurse nut oak object observe obtain obvious occasion occupy ocean 
-odd odds offer office officer official often oil okay old olive olympic 
-omit once onion online only open opera opinion opponent opportunity 
-oppose option orange orbit order ordinary organ organize orient origin 
-original ornament other outcome outlet outline output outset outside 
-oval oven over overall overcome overlook overt overwhelm owe own owner 
-oxygen ozone pack package page paid pain paint pair palace palm pan 
-panel panic paper parade parade parent park part partner party pass 
-passage passion past paste path patient pattern pause pave payment peace 
-peak pen penalty pencil people pepper percent perfect perform perfume 
-perhaps period permit person pet phase phone photo phrase physical piano 
-pick picture piece pilot pin pipe pitch pizza place plain plan planet 
-plant plate platform play player please pledge plenty plot plug plunge 
-plus pocket poem poet poetry point polar pole police policy polish 
-political poll pool poor popular population port portrait pose position 
-positive possess possible post potato potential pound pour poverty powder 
-power practice praise pray preach precise predict prefer prepare present 
-preserve press pressure pretend pretty prevent previous price pride 
-primary prime prince princess principal print prior prism prison privacy 
-private prize problem procedure proceed process produce profit program 
-project promise promote prompt proof proper property proportion proposal 
-propose protect protein protest proud prove provide province provision 
-provoke pulse pump punch pupil puppy purchase pure purpose purse pursue 
-push put puzzle pyramid qualify quality quarter queen quest question 
-quick quiet quilt quit quite quiz quote race radar radio rail rain 
-raise rally ranch random range rank rapid rare rate rather ratio rattle 
-raw reach react read ready real reality realm reap rear reason rebel 
-recall receipt receive recent recipe reckon recognize recommend record 
-recover recruit recycle red reduce reflect reform refuse region register 
-regret regulate reject relate relax release relevant relief religion 
-rely remain remark remedy remember remind remote remove render renew 
-rent repair repeat replace report represent republic reputation request 
-require rescue resemble reserve reside resign resist resolve resort 
-resource respond restore restrain result resume retail retain retire 
-retreat return reveal revenue reverse review revive revolution reward 
-rhythm rich ride ridge rifle right rigid ring riot rip rise risk rival 
-river road robot robust rock rocket rod role roll roof room root rope 
-rose rotate rough round route routine row royal rub rule run rural rush 
-rust sacred sacrifice sad safe sail saint salad salary salmon salt same 
-sample sanction sand satellite satisfy sauce save scale scan scare 
-scatter scene schedule scholar science scissors scope score scout scrap 
-screen script scroll sea seal search season seat second secret section 
-secure seed seek segment select self sell seminar senior sense sentence 
-separate sequence serious serve session set settle setup seven severe 
-shade shadow shaft shake shall shape share shark sharp shatter shave 
-shed sheep sheer sheet shelf shell shelter shield shift shine ship shirt 
-shock shoe shoot shop shore short shot should shoulder shout shovel show 
-shrink shrug shut shuttle sick side siege sight sign silent silicon silk 
-silly silver similar simple since sing single sink sip sir sister site 
-situate six size skate sketch ski skill skin skip skirt skull slab slam 
-slap slaughter slave sleep slender slice slide slight slim slip slope 
-slot slow small smart smell smile smoke smooth snack snake snap snow 
-soak soap social sock soda soft soil solar soldier solid solution solve 
-some son song soon sophisticated sorry sort soul sound source south 
-sovereign space spare spark speak special species specific speech speed 
-spell spend sphere spice spider spike spill spin spirit split spoil 
-spoke sponge spoon sport spot spray spread spring spy squad square 
-squeeze stability stable stack stadium staff stage stair stake stale 
-stamp stand staple star start state station statue status stay steak 
-steal steel steep steer stem step stereo stick stiff still sting stock 
-stolen stone stop store storm story stove straight strain strange 
-strategy stream street strength stretch strict strike string strip 
-stroke strong structure struggle studio study stuff stumble style subject 
-submit substance subtract succeed success such sudden suffer sugar suggest 
-suit sum summer summit sun superb superior supply support suppose supreme 
-surface surgery surprise survey survive suspect suspend sustain swallow 
-swamp swap swarm swear sweat sweep sweet swell swift swim swing swirl 
-switch sword symbol symptom system table tackle tactic tail take tale 
-talent talk tank tap tape target task taste tattoo taxi teach team tear 
-temple tenant tender tense tent term test text thank theme theory therapy 
-thermal thesis thick thin thing think third this thorn thorough those 
-thought thread threat three thrive throne through throw thumb ticket 
-tide tight timber time tiny tip tire tissue title toast today token 
-tolerance tomorrow tone tooth top topic torch total touch tough tour 
-toward tower town toy trace track trade traffic trail train trait 
-tram transfer transform transit translate trap travel tray treasure 
-treat treaty tree trend trial tribe trick trigger trim trip triumph 
-troop trouble truck true truly trust truth try tube tunnel turn turtle 
-twelve twenty twice twin twist two type typical ugly ultimate umbrella 
-unable uncle under undergo understand undertake uniform union unique unit 
-universe university unknown unless unlike unlikely until unusual update 
-upgrade uplift upper upset urban urge usage use used useful user usual 
-utility vacant vacuum valid valley valuable valve van vanish variable 
-vast vehicle velvet vendor venture venue verb verify version veteran 
-viable vibrant victim victory video view village vintage violence viral 
-virtual virtue virus visible vision visit visual vital vivid vocal voice 
-void volcano volume vote voyage wage wagon wait wake walk wall wander 
-want war warm warn warrant warrior wash waste watch water wave way weak 
-wealth weapon wear weather web wedding weed week weigh weight welcome 
-welfare well west wet whale what wheel when where which while whip 
-whisper white who whole why wide wife wild will win wind window wine wing 
-winner winter wire wisdom wise wish witness wolf woman wonder wood wool 
-word work world worry worth would wrap wreck wrist write wrong yard year 
-yellow yes yield young youth zeal zebra zero zone zoo""".split()
+from bip39_words import BIP39_WORDS
 
 DEFAULT_LENGTH = 20
+WORD_BITS = 11  # log2(2048)
+
+_SYMBOLS = "!@#$%^&*()-_=+[]{}|;:,.<>?"
+
+
+def _random_words(n):
+    return [secrets.choice(BIP39_WORDS) for _ in range(n)]
+
 
 def generate_password(length=DEFAULT_LENGTH, symbols=False):
     chars = string.ascii_letters + string.digits
     if symbols:
-        chars += "!@#$%^&*()-_=+[]{}|;:,.<>?"
-    
-    # Ensure at least one of each type
-    password = [
+        chars += _SYMBOLS
+    pwd = [
         secrets.choice(string.ascii_lowercase),
         secrets.choice(string.ascii_uppercase),
         secrets.choice(string.digits),
     ]
     if symbols:
-        password.append(secrets.choice("!@#$%^&*"))
-    
-    remaining = length - len(password)
-    password.extend(secrets.choice(chars) for _ in range(remaining))
-    secrets.SystemRandom().shuffle(password)
-    return ''.join(password)
+        pwd.append(secrets.choice("!@#$%^&*"))
+    pwd.extend(secrets.choice(chars) for _ in range(length - len(pwd)))
+    secret = secrets.SystemRandom()
+    for i in range(len(pwd) - 1, 0, -1):
+        j = secret.randrange(i + 1)
+        pwd[i], pwd[j] = pwd[j], pwd[i]
+    return ''.join(pwd)
+
 
 def generate_passphrase(word_count=4):
-    selected = [secrets.choice(WORDS).capitalize() for _ in range(word_count)]
-    return '-'.join(selected)
+    return '-'.join(w.capitalize() for w in _random_words(word_count))
+
+
+def generate_derived(word_count=4, length=DEFAULT_LENGTH, swaps=3, seed=None):
+    """BIP39 words -> SHA256 -> slice to `length` -> `swaps` random letter swaps.
+
+    `seed` pins the words deterministically (reproducible output). Without it,
+    words come from secrets, so output is unique per run.
+    """
+    if seed is not None:
+        # deterministic: derive words from the seed string
+        h = hashlib.sha256(seed.encode()).digest()
+        words = [BIP39_WORDS[int.from_bytes(h[i:i + 2], 'big') & 0x7FF]
+                 for i in range(0, word_count * 2, 2)]
+    else:
+        words = _random_words(word_count)
+
+    rng = secrets.SystemRandom()
+    digest = hashlib.sha256(' '.join(words).encode()).hexdigest()  # 64 hex chars
+
+    # cut a contiguous slice of `length` from a random position (from each end)
+    avail = len(digest) - length
+    start = rng.randrange(avail + 1) if avail >= 0 else 0
+    base = digest[start:start + length]
+    if avail < 0:  # need more chars than digest: repeat it
+        base = (digest * 2)[:length]
+
+    parts = list(base)
+    positions = rng.sample(range(len(parts)), k=min(swaps, len(parts)))
+    for idx in positions:
+        parts[idx] = rng.choice(string.ascii_letters + string.digits)
+    pwd = ''.join(parts)
+
+    bits = word_count * WORD_BITS
+    return pwd, bits, words
+
 
 def generate_pin(length=6):
     return ''.join(str(secrets.randbelow(10)) for _ in range(length))
 
-def entropy(password):
-    """Estimate entropy bits."""
+
+def entropy(pwd):
     charset = 0
-    if any(c.islower() for c in password): charset += 26
-    if any(c.isupper() for c in password): charset += 26
-    if any(c.isdigit() for c in password): charset += 10
-    if any(c in "!@#$%^&*()-_=+[]{}|;:,.<>?" for c in password): charset += 30
-    return round(len(password) * math.log2(max(charset, 1)), 1)
+    if any(c.islower() for c in pwd): charset += 26
+    if any(c.isupper() for c in pwd): charset += 26
+    if any(c.isdigit() for c in pwd): charset += 10
+    if any(c in _SYMBOLS for c in pwd): charset += 30
+    return round(len(pwd) * math.log2(max(charset, 1)), 1)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Secure password generator")
     parser.add_argument("mode", nargs="?", default="password",
-                        choices=["password", "phrase", "pin"],
-                        help="password, phrase, or pin")
-    parser.add_argument("-l", "--length", type=int, help="length")
-    parser.add_argument("-s", "--symbols", action="store_true", help="include symbols")
-    parser.add_argument("-n", "--count", type=int, default=1, help="number to generate")
-    parser.add_argument("-w", "--words", type=int, default=4, help="word count for phrase")
-    
+                        choices=["password", "phrase", "derive", "pin"])
+    parser.add_argument("-l", "--length", type=int)
+    parser.add_argument("-s", "--symbols", action="store_true")
+    parser.add_argument("-n", "--count", type=int, default=1)
+    parser.add_argument("-w", "--words", type=int, default=4)
+    parser.add_argument("--swaps", type=int, default=3, help="derive: random letter swaps")
+    parser.add_argument("--seed", help="derive: deterministic seed string")
     args = parser.parse_args()
-    
+
     for i in range(args.count):
         if args.mode == "phrase":
             wc = args.length if args.length else args.words
             pwd = generate_passphrase(wc)
+            label = f"[{wc * WORD_BITS} bits]"
+        elif args.mode == "derive":
+            wc = args.words
+            ln = args.length if args.length else DEFAULT_LENGTH
+            sw = args.swaps
+            pwd, bits, words = generate_derived(wc, ln, sw, args.seed)
+            label = f"[{bits} bits seed, {ln} chars, {sw} swaps]"
         elif args.mode == "pin":
             ln = args.length if args.length else 6
             pwd = generate_pin(ln)
+            label = ""
         else:
             ln = args.length if args.length else DEFAULT_LENGTH
             pwd = generate_password(ln, args.symbols)
-        
-        ent = entropy(pwd)
-        label = f"[{ent} bits]" if args.mode != "pin" else ""
+            label = f"[{entropy(pwd)} bits]"
+
         if args.count > 1:
-            print(f"{i+1:>3}.  {pwd}  {label}")
+            print(f"{i + 1:>3}.  {pwd}  {label}")
         else:
             print(pwd)
-            if ent:
-                print(f"({ent} bits of entropy)")
-    
-    if args.count > 1:
+            if label:
+                print(label)
+
 
 if __name__ == "__main__":
     main()
